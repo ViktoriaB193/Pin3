@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Редактор раскраски (v13) — цвет + интенсивность</title>
+<style>
+  body{margin:0;background:#0b0f14;color:#fff;font-family:system-ui,Segoe UI,Arial}
+  #app{display:grid;grid-template-columns:420px 1fr;gap:12px;padding:12px;min-height:100vh;box-sizing:border-box}
+  .panel{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:12px;box-sizing:border-box}
+  .stage{
+    position:relative;border-radius:16px;border:1px solid rgba(255,255,255,.12);
+    background:radial-gradient(rgba(255,255,255,.06) 1px,transparent 1px);
+    background-size:22px 22px;
+    overflow:auto; min-height:520px;
+    display:flex; justify-content:center; align-items:flex-start;
+    padding:14px; box-sizing:border-box;
+  }
+  #wrap{position:relative; display:inline-block; line-height:0; background:#fff; border-radius:10px; overflow:hidden;}
+  #img{display:block; max-width:100%; height:auto; user-select:none}
+  #svg{position:absolute; left:0; top:0; width:100%; height:100%}
+
+  input,button,textarea,select{width:100%;margin-top:8px;padding:10px;border-radius:12px;border:none;box-sizing:border-box}
+  button{background:#4fd1c5;font-weight:900;cursor:pointer}
+  input,textarea,select{background:#111;border:1px solid rgba(255,255,255,.2);color:#fff}
+  textarea{min-height:82px;resize:vertical}
+  .hint{font-size:12px;color:rgba(255,255,255,.72);margin-top:8px;line-height:1.35}
+  .row{display:flex;gap:10px;margin-top:8px}
+  .row button{width:auto;flex:1}
+  .row2{display:flex;gap:10px;margin-top:8px;align-items:center}
+  .row2 > *{flex:1}
+  .badge{display:inline-block;margin-top:8px;font-size:12px;color:rgba(255,255,255,.86);
+    padding:6px 10px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(255,255,255,.06)}
+  .list{
+    margin-top:10px;max-height:220px;overflow:auto;border-radius:12px;
+    border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.22);
+  }
+  .item{
+    display:flex; gap:10px; align-items:center; justify-content:space-between;
+    padding:10px;border-top:1px solid rgba(255,255,255,.08);
+    cursor:pointer; user-select:none;font-size:12px;
+  }
+  .item:first-child{border-top:none}
+  .item.active{background:rgba(255,255,255,.06); outline:2px solid rgba(124,240,190,.18)}
+  .pill{font-size:11px;padding:5px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:rgba(255,255,255,.86)}
+  .danger{background:#ef4444}
+  .gray{background:#64748b}
+  .ok{background:#22c55e}
+  .mini{font-size:11px;color:rgba(255,255,255,.7)}
+  .split{display:grid;grid-template-columns:1fr 140px;gap:10px}
+  .colorGrid{display:grid;grid-template-columns:1fr 62px;gap:10px;align-items:center}
+  .swatch{height:42px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:#ff4d6d}
+  .hr{height:1px;background:rgba(255,255,255,.12);margin:12px 0}
+  .rangeRow{display:grid;grid-template-columns:1fr 92px;gap:10px;align-items:center}
+  input[type="range"]{padding:0;height:38px}
+  input[type="color"]{padding:0;height:42px;border-radius:12px;overflow:hidden;cursor:pointer}
+  @media(max-width:980px){#app{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="panel">
+    <h3 style="margin:0 0 6px 0">Редактор раскраски (v13)</h3>
+    <div class="hint">
+      Добавила: <b>выбор цвета кликом</b> (палитра) + <b>интенсивность заливки</b> в предпросмотре.<br>
+      Интенсивность влияет только на предпросмотр (как “яркость/прозрачность” заливки), сам цвет сохраняется в HEX.
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="hint"><b>1) Картинка</b> — вставь прямую ссылку (PNG/JPG/SVG)</div>
+    <input id="url" placeholder="https://i.ibb.co/...jpg">
+    <button id="load">Загрузить картинку</button>
+
+    <div class="row">
+      <button id="close">Замкнуть</button>
+      <button id="undo" class="gray">Назад</button>
+      <button id="clear" class="danger">Очистить</button>
+    </div>
+
+    <div class="row">
+      <button id="save" class="ok">Сохранить область</button>
+      <button id="new" class="gray">Новая обводка</button>
+    </div>
+
+    <div class="row2">
+      <span class="badge">Точек: <b id="cnt">0</b></span>
+      <span class="badge">Областей: <b id="rcnt">0</b></span>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="hint"><b>2) Список областей</b> (клик — выделить)</div>
+    <div class="list" id="list"></div>
+
+    <div class="hr"></div>
+
+    <div class="hint"><b>3) Настройки выбранной области</b></div>
+    <div class="mini" id="selInfo">Ничего не выбрано</div>
+
+    <div class="split">
+      <div>
+        <label class="mini">Ответ / номер</label>
+        <input id="ans" type="number" inputmode="numeric" placeholder="12" disabled>
+      </div>
+      <div>
+        <label class="mini">Показывать номер</label>
+        <select id="showNum" disabled>
+          <option value="1">Да</option>
+          <option value="0">Нет</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="colorGrid">
+      <div>
+        <label class="mini">Цвет (HEX)</label>
+        <input id="colorHex" placeholder="#ff4d6d" disabled>
+      </div>
+      <input id="colorPick" type="color" value="#ff4d6d" disabled title="Выбрать цвет">
+    </div>
+
+    <div class="rangeRow">
+      <div>
+        <label class="mini">Интенсивность заливки (предпросмотр)</label>
+        <input id="fillAlpha" type="range" min="0" max="1" step="0.01" value="0.22" disabled>
+      </div>
+      <div class="swatch" id="swatch" title="Превью заливки"></div>
+    </div>
+
+    <label class="mini">Задание</label>
+    <textarea id="task" placeholder="Например: 3 × 4 = ?" disabled></textarea>
+
+    <div class="row">
+      <button id="apply" class="ok" disabled>Сохранить поля</button>
+      <button id="del" class="danger" disabled>Удалить выбранную</button>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="row">
+      <button id="export" class="gray">Экспорт JSON</button>
+      <button id="copy" class="gray" disabled>Скопировать JSON</button>
+    </div>
+    <textarea id="out" readonly placeholder="Экспорт появится тут…"></textarea>
+  </div>
+
+  <div class="panel stage">
+    <div id="wrap">
+      <img id="img" alt="">
+      <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id)=>document.getElementById(id);
+
+const img = $("img");
+const svg = $("svg");
+const wrap = $("wrap");
+const cnt = $("cnt");
+const rcnt = $("rcnt");
+const listEl = $("list");
+const outEl = $("out");
+const copyBtn = $("copy");
+
+const selInfo = $("selInfo");
+const ansEl = $("ans");
+const showNumEl = $("showNum");
+const colorHexEl = $("colorHex");
+const colorPickEl = $("colorPick");
+const fillAlphaEl = $("fillAlpha");
+const swatchEl = $("swatch");
+const taskEl = $("task");
+const applyBtn = $("apply");
+const delBtn = $("del");
+
+let points = [];
+let closed = false;
+let regions = []; // {id, points, answer, color, task, showNum, alpha}
+let selectedId = null;
+
+const uid = () => "R" + Math.random().toString(16).slice(2,10);
+
+function clampHex(s){
+  s = (s||"").trim();
+  if (!s) return "";
+  if (s[0] !== "#") s = "#" + s;
+  if (/^#[0-9a-fA-F]{3}$/.test(s) || /^#[0-9a-fA-F]{6}$/.test(s)) return s;
+  return "";
+}
+function hexToRgb(hex){
+  hex = clampHex(hex);
+  if (!hex) return null;
+  if (hex.length === 4){
+    const r = parseInt(hex[1]+hex[1],16);
+    const g = parseInt(hex[2]+hex[2],16);
+    const b = parseInt(hex[3]+hex[3],16);
+    return {r,g,b};
+  }
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return {r,g,b};
+}
+function rgba(hex, a){
+  const rgb = hexToRgb(hex);
+  if (!rgb) return `rgba(255,255,255,${a})`;
+  return `rgba(${rgb.r},${rgb.g},${rgb.b},${a})`;
+}
+
+function setCounts(){
+  cnt.textContent = String(points.length);
+  rcnt.textContent = String(regions.length);
+  delBtn.disabled = !selectedId;
+}
+
+function syncOverlay(){
+  const w = img.clientWidth || 0;
+  const h = img.clientHeight || 0;
+  if (!w || !h) return;
+  wrap.style.width = w + "px";
+  wrap.style.height = h + "px";
+  svg.setAttribute("viewBox", `0 0 ${img.naturalWidth} ${img.naturalHeight}`);
+}
+window.addEventListener("resize", () => { syncOverlay(); draw(); });
+
+$("load").onclick = ()=>{
+  const u = $("url").value.trim();
+  if(!u) return alert("Вставь прямую ссылку на картинку");
+
+  points = [];
+  closed = false;
+  regions = [];
+  selectedId = null;
+  outEl.value = "";
+  copyBtn.disabled = true;
+
+  svg.innerHTML = "";
+  listEl.innerHTML = "";
+  clearSelectedUI();
+  setCounts();
+
+  img.onload = ()=>{ syncOverlay(); draw(); };
+  img.onerror = ()=>alert("Не удалось загрузить картинку. Проверь, что это прямая ссылка на .png/.jpg/.svg");
+  img.src = u;
+};
+
+function getImgPointFromEvent(e){
+  const r = svg.getBoundingClientRect();
+  const rx = (e.clientX - r.left) / r.width;
+  const ry = (e.clientY - r.top) / r.height;
+  return [rx * img.naturalWidth, ry * img.naturalHeight];
+}
+function dist(a,b){ const dx=a[0]-b[0], dy=a[1]-b[1]; return Math.sqrt(dx*dx+dy*dy); }
+
+function smoothPath(pts, isClosed){
+  if (pts.length === 0) return "";
+  if (pts.length === 1) return `M ${pts[0][0]} ${pts[0][1]}`;
+  const mid = (a,b) => [(a[0]+b[0])/2, (a[1]+b[1])/2];
+
+  let d = "";
+  const p0 = pts[0], p1 = pts[1], m0 = mid(p0,p1);
+  d += `M ${p0[0]} ${p0[1]} `;
+  d += `Q ${p0[0]} ${p0[1]} ${m0[0]} ${m0[1]} `;
+  for (let i=1;i<pts.length-1;i++){
+    const p = pts[i], pn = pts[i+1], m = mid(p, pn);
+    d += `Q ${p[0]} ${p[1]} ${m[0]} ${m[1]} `;
+  }
+  const last = pts[pts.length-1];
+  d += `T ${last[0]} ${last[1]} `;
+  if (isClosed && pts.length>=3) d += "Z";
+  return d.trim();
+}
+
+function centroid(pts){
+  let x=0,y=0;
+  for (const p of pts){ x+=p[0]; y+=p[1]; }
+  return [x/pts.length, y/pts.length];
+}
+
+function draw(){
+  svg.innerHTML = "";
+  setCounts();
+  if (!img.naturalWidth || !img.naturalHeight) return;
+
+  regions.forEach((r) => {
+    const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+    path.setAttribute("d", smoothPath(r.points, true));
+    const isSel = (r.id === selectedId);
+    const a = (typeof r.alpha === "number") ? r.alpha : 0.22;
+
+    // preview fill uses chosen color + alpha
+    path.setAttribute("fill", isSel ? rgba(r.color, Math.min(0.55, a + 0.15)) : rgba(r.color, a));
+    path.setAttribute("stroke", isSel ? "rgba(124,240,190,0.95)" : "rgba(0,0,0,0.25)");
+    path.setAttribute("stroke-width", isSel ? "4" : "3");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    path.style.cursor = "pointer";
+    path.addEventListener("click", (e)=>{ e.stopPropagation(); selectRegion(r.id); });
+    svg.appendChild(path);
+
+    if (r.showNum && r.answer !== null && r.answer !== undefined && String(r.answer).length){
+      const [cx,cy] = centroid(r.points);
+      const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+      t.setAttribute("x", cx);
+      t.setAttribute("y", cy);
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("dominant-baseline", "middle");
+      t.setAttribute("fill", "rgba(0,0,0,0.55)");
+      t.setAttribute("stroke", "rgba(255,255,255,0.92)");
+      t.setAttribute("stroke-width", "4");
+      t.setAttribute("paint-order", "stroke");
+      t.style.font = "900 22px system-ui,Segoe UI,Arial";
+      t.textContent = String(r.answer);
+      svg.appendChild(t);
+    }
+  });
+
+  if (points.length){
+    const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+    path.setAttribute("d", smoothPath(points, closed));
+    path.setAttribute("fill", closed ? "rgba(34,197,94,0.16)" : "none");
+    path.setAttribute("stroke", "rgba(34,197,94,0.95)");
+    path.setAttribute("stroke-width", "4");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(path);
+
+    for (let i=0;i<points.length;i++){
+      const c = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      c.setAttribute("cx", points[i][0]);
+      c.setAttribute("cy", points[i][1]);
+      c.setAttribute("r", i===0 ? 6 : 5);
+      c.setAttribute("fill", i===0 ? "rgba(255,255,255,0.95)" : "rgba(34,197,94,0.95)");
+      c.setAttribute("stroke", "rgba(0,0,0,0.35)");
+      c.setAttribute("stroke-width", "2");
+      c.style.cursor = (i===0 && points.length>=3) ? "pointer" : "default";
+      if (i===0 && points.length>=3){
+        c.addEventListener("click",(e)=>{ e.stopPropagation(); closed = true; draw(); });
+      }
+      svg.appendChild(c);
+    }
+  }
+}
+
+function rebuildList(){
+  listEl.innerHTML = "";
+  if (!regions.length){
+    const d = document.createElement("div");
+    d.className = "hint";
+    d.style.padding = "10px";
+    d.textContent = "Пока нет сохранённых областей.";
+    listEl.appendChild(d);
+    return;
+  }
+  regions.forEach((r, idx)=>{
+    const it = document.createElement("div");
+    it.className = "item" + (r.id===selectedId ? " active" : "");
+    const ansTxt = (r.answer===null || r.answer===undefined || r.answer==="") ? "—" : r.answer;
+    it.innerHTML = `<b>Область ${idx+1}</b> <span class="pill" style="margin-left:6px">№ ${ansTxt}</span>
+      <span class="pill" style="float:right;background:${rgba(r.color,0.9)}">${r.id}</span>`;
+    it.addEventListener("click", ()=>selectRegion(r.id));
+    listEl.appendChild(it);
+  });
+}
+
+function clearSelectedUI(){
+  selInfo.textContent = "Ничего не выбрано";
+  ansEl.value = "";
+  showNumEl.value = "1";
+  colorHexEl.value = "#ff4d6d";
+  colorPickEl.value = "#ff4d6d";
+  fillAlphaEl.value = "0.22";
+  taskEl.value = "";
+  swatchEl.style.background = rgba("#ff4d6d", 0.22);
+
+  for (const el of [ansEl, showNumEl, colorHexEl, colorPickEl, fillAlphaEl, taskEl, applyBtn, delBtn]){
+    el.disabled = true;
+  }
+  selectedId = null;
+}
+
+function selectRegion(id){
+  selectedId = id;
+  const r = regions.find(x=>x.id===id);
+  if (!r) { clearSelectedUI(); return; }
+
+  selInfo.textContent = "Выбрано: " + id;
+
+  for (const el of [ansEl, showNumEl, colorHexEl, colorPickEl, fillAlphaEl, taskEl, applyBtn, delBtn]){
+    el.disabled = false;
+  }
+
+  ansEl.value = (r.answer===null || r.answer===undefined) ? "" : r.answer;
+  showNumEl.value = r.showNum ? "1" : "0";
+  colorHexEl.value = r.color || "#ff4d6d";
+  colorPickEl.value = clampHex(r.color || "#ff4d6d") || "#ff4d6d";
+  fillAlphaEl.value = String((typeof r.alpha === "number") ? r.alpha : 0.22);
+  taskEl.value = r.task || "";
+
+  swatchEl.style.background = rgba(colorHexEl.value, Number(fillAlphaEl.value));
+  rebuildList();
+  draw();
+}
+
+function syncColorFromHex(){
+  const hex = clampHex(colorHexEl.value);
+  if (!hex) return;
+  colorHexEl.value = hex;
+  colorPickEl.value = hex;
+  swatchEl.style.background = rgba(hex, Number(fillAlphaEl.value));
+  if (selectedId){
+    const r = regions.find(x=>x.id===selectedId);
+    if (r){ r.color = hex; }
+  }
+  draw();
+  rebuildList();
+}
+
+function syncColorFromPick(){
+  const hex = clampHex(colorPickEl.value);
+  if (!hex) return;
+  colorHexEl.value = hex;
+  swatchEl.style.background = rgba(hex, Number(fillAlphaEl.value));
+  if (selectedId){
+    const r = regions.find(x=>x.id===selectedId);
+    if (r){ r.color = hex; }
+  }
+  draw();
+  rebuildList();
+}
+
+function syncAlpha(){
+  const a = Number(fillAlphaEl.value);
+  const hex = clampHex(colorHexEl.value) || "#ff4d6d";
+  swatchEl.style.background = rgba(hex, a);
+  if (selectedId){
+    const r = regions.find(x=>x.id===selectedId);
+    if (r){ r.alpha = a; }
+  }
+  draw();
+}
+
+colorHexEl.addEventListener("input", syncColorFromHex);
+colorPickEl.addEventListener("input", syncColorFromPick);
+fillAlphaEl.addEventListener("input", syncAlpha);
+
+svg.addEventListener("click", (e)=>{
+  if (!img.naturalWidth) return;
+  if (closed) return;
+  const p = getImgPointFromEvent(e);
+  if (points.length>=3 && dist(p, points[0]) <= 14){
+    closed = true; draw(); return;
+  }
+  points.push(p); draw();
+});
+
+$("close").onclick = ()=>{ if (points.length>=3){ closed = true; draw(); } };
+$("undo").onclick = ()=>{ if (closed) closed=false; points.pop(); draw(); };
+$("clear").onclick = ()=>{ points=[]; closed=false; draw(); };
+$("new").onclick = ()=>{ points=[]; closed=false; draw(); };
+
+$("save").onclick = ()=>{
+  if (points.length < 3) return alert("Нужно минимум 3 точки");
+  if (!closed) return alert("Сначала замкни контур");
+
+  const r = {
+    id: uid(),
+    points: points.map(p=>[+p[0].toFixed(2), +p[1].toFixed(2)]),
+    answer: null,
+    color: "#ff4d6d",
+    alpha: 0.22,
+    task: "",
+    showNum: true
+  };
+  regions.push(r);
+
+  points = [];
+  closed = false;
+
+  rebuildList();
+  selectRegion(r.id);
+  setCounts();
+};
+
+$("apply").onclick = ()=>{
+  if (!selectedId) return;
+  const r = regions.find(x=>x.id===selectedId);
+  if (!r) return;
+
+  const a = ansEl.value.trim();
+  r.answer = a==="" ? null : Number(a);
+  r.showNum = (showNumEl.value === "1");
+
+  const hex = clampHex(colorHexEl.value);
+  if (!hex) return alert("Цвет должен быть HEX, например #ff4d6d");
+  r.color = hex;
+
+  r.alpha = Number(fillAlphaEl.value);
+  r.task = (taskEl.value || "").trim();
+
+  rebuildList();
+  draw();
+};
+
+$("del").onclick = ()=>{
+  if (!selectedId) return;
+  regions = regions.filter(r => r.id !== selectedId);
+  selectedId = null;
+  rebuildList();
+  draw();
+  clearSelectedUI();
+  setCounts();
+};
+
+$("export").onclick = ()=>{
+  if (!img.naturalWidth) return alert("Сначала загрузи картинку");
+
+  // Экспорт сохраняет и alpha (интенсивность) тоже — пригодится для будущей игры/настроек
+  const payload = {
+    version: "v13",
+    imageUrl: $("url").value.trim(),
+    imageW: img.naturalWidth,
+    imageH: img.naturalHeight,
+    regions: regions.map(r => ({
+      id: r.id,
+      points: r.points,
+      answer: r.answer,
+      color: r.color,
+      alpha: (typeof r.alpha==="number") ? r.alpha : 0.22,
+      task: r.task,
+      showNum: !!r.showNum
+    }))
+  };
+
+  outEl.value = JSON.stringify(payload, null, 2);
+  copyBtn.disabled = false;
+  outEl.focus(); outEl.select();
+};
+
+$("copy").onclick = async ()=>{
+  try{ await navigator.clipboard.writeText(outEl.value || ""); alert("JSON скопирован ✅"); }
+  catch(e){ alert("Не удалось скопировать автоматически. Можно выделить текст вручную и Ctrl+C."); }
+};
+
+// init
+clearSelectedUI();
+rebuildList();
+draw();
+</script>
+</body>
+</html>
